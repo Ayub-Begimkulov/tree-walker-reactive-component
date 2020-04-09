@@ -6,12 +6,12 @@ const state = {
 const root = document.querySelector('#app');
 
 const varRegex = '([a-zA-Z_$][0-9a-zA-Z_$]*)';
-const spaceOrNewLine = '(?:\\s|\\n)';
+const spaceOrNewLine = '(?:\\s|\\n)*';
 const mustacheRegex = new RegExp(
-  `{{${spaceOrNewLine}*${varRegex}${spaceOrNewLine}*}}`
+  `{{${spaceOrNewLine}${varRegex}${spaceOrNewLine}}}`
 );
 const forInRegex = new RegExp(
-  `${varRegex}${spaceOrNewLine}*in${spaceOrNewLine}*${varRegex}`
+  `${varRegex}${spaceOrNewLine}in${spaceOrNewLine}${varRegex}`
 );
 
 const makeComponent = (
@@ -86,7 +86,11 @@ const makeComponent = (
 
           activeFunction = null;
         } else if (name === 'data-for') {
-          console.log(value.match(forInRegex));
+          const forInMatch = value.match(forInRegex);
+          if (forInMatch) {
+            const [_, alias, arrayKey] = forInMatch;
+            console.log(state[arrayKey]);
+          }
         } else {
           const mustacheMatch = value.match(mustacheRegex);
           if (mustacheMatch) {
@@ -110,7 +114,7 @@ const replaceNode = (oldNode, newNode) => {
 };
 
 const hasContent = (text) =>
-  text.replace(new RegExp(`${spaceOrNewLine}*`, 'g'), '').length > 0;
+  text.replace(new RegExp(spaceOrNewLine, 'g'), '').length > 0;
 
 makeComponent(root, {
   state,
