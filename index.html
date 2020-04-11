@@ -9,8 +9,10 @@
   <body>
     <div id="app" data-component="app">
       <input data-on-input="onInput" />
-      <div data-if="state.text.length > 0">{{ text }}</div>
-      <p data-for="text in arr" data-on-click="onClick" class="{{ text }}">
+      <div data-if="state.text.length > 0" data-on-click="onClick">
+        {{ text }}
+      </div>
+      <p data-for="text in arr" class="{{ text }}">
         {{ text }}
       </p>
     </div>
