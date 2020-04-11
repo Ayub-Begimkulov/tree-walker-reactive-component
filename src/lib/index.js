@@ -32,6 +32,18 @@ export const makeComponent = (
     }
   });
 
+  const init = () => {
+    const WHAT_TO_SHOW = 5; // element or text
+    const walker = document.createTreeWalker(el, WHAT_TO_SHOW);
+
+    let current = el;
+
+    while (current) {
+      current instanceof Text ? handleText(current) : handleElement(current);
+      current = walker.nextNode();
+    }
+  };
+
   const handleText = node => {
     const text = node.textContent;
     if (textHasContent(text)) {
@@ -62,7 +74,7 @@ export const makeComponent = (
           condition = new Function('state', 'return ' + value);
           break;
         case 'data-for':
-          const placeholder = current.cloneNode(true);
+          const placeholder = node.cloneNode(true);
           console.log(placeholder);
           const forInMatch = value.match(forInRegex);
           if (forInMatch) {
@@ -76,7 +88,7 @@ export const makeComponent = (
             const key = mustacheMatch[1];
             if (state[key]) {
               addDep(key, newVal => node.setAttribute(name, newVal));
-              current.setAttribute(name, state[key]);
+              node.setAttribute(name, state[key]);
             }
           }
       }
@@ -114,16 +126,5 @@ export const makeComponent = (
     }
   };
 
-  const WHAT_TO_SHOW = 5; // element or text
-  const walker = document.createTreeWalker(el, WHAT_TO_SHOW);
-
-  let current = el;
-
-  while (current) {
-    const node = current;
-
-    node instanceof Text ? handleText(node) : handleElement(node);
-
-    current = walker.nextNode();
-  }
+  init();
 };
