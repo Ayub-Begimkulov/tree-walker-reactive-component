@@ -1,9 +1,4 @@
-const state = {
-  arr: ['a', 'b', 'c'],
-  text: 'hello world'
-};
-
-const root = document.querySelector('#app');
+import { textHasContent, replaceNode, addListener } from './utils';
 
 const varRegex = '([a-zA-Z_$][0-9a-zA-Z_$]*)';
 const spaceOrNewLine = '(?:\\s|\\n)*';
@@ -14,7 +9,7 @@ const forInRegex = new RegExp(
   `${varRegex}${spaceOrNewLine}in${spaceOrNewLine}${varRegex}`
 );
 
-const makeComponent = (
+export const makeComponent = (
   el,
   { state: initialState = {}, listeners = {} } = {}
 ) => {
@@ -39,7 +34,7 @@ const makeComponent = (
 
   const handleText = node => {
     const text = node.textContent;
-    if (hasContent(text)) {
+    if (textHasContent(text)) {
       const key = text.match(mustacheRegex)[1];
       if (state[key]) {
         node.textContent = state[key];
@@ -122,7 +117,7 @@ const makeComponent = (
   const WHAT_TO_SHOW = 5; // element or text
   const walker = document.createTreeWalker(el, WHAT_TO_SHOW);
 
-  let current = root;
+  let current = el;
 
   while (current) {
     const node = current;
@@ -132,28 +127,3 @@ const makeComponent = (
     current = walker.nextNode();
   }
 };
-
-const replaceNode = (oldNode, newNode) => {
-  const parent = oldNode.parentNode;
-  parent.insertBefore(newNode, oldNode);
-  parent.removeChild(oldNode);
-};
-
-const hasContent = text =>
-  text.replace(new RegExp(spaceOrNewLine, 'g'), '').length > 0;
-
-const addListener = (el, event, listener) => {
-  el.addEventListener(event, listener);
-  return () => el.removeEventListener(event, listener);
-};
-
-makeComponent(root, {
-  state,
-  listeners: {
-    onInput: (state, e) => {
-      console.log(e.target.value);
-      state.text = e.target.value;
-    },
-    onClick: ({ text }) => console.log(text)
-  }
-});
