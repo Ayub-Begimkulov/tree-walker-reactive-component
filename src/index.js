@@ -14,6 +14,11 @@ makeComponent(root, {
       console.log(e.target.value);
       state.text = e.target.value;
     },
-    onClick: ({ text }) => console.log(text)
+    onClick: ({ text }) => console.log(text),
+    updateArray: state => {
+      state.arr = Array(Math.round(Math.random() * 10))
+        .fill()
+        .map(() => Math.round(Math.random() * 100));
+    }
   }
 });

@@ -1,4 +1,11 @@
-import { textHasContent, replaceNode, addListener } from './utils';
+import { zip } from 'lodash-es';
+import {
+  isDef,
+  textHasContent,
+  replaceNode,
+  addListener,
+  setAttribute
+} from './utils';
 
 const varRegex = '([a-zA-Z_$][0-9a-zA-Z_$]*)';
 const spaceOrNewLine = '(?:\\s|\\n)*';
@@ -47,17 +54,22 @@ export const makeComponent = (
   const handleText = node => {
     const text = node.textContent;
     if (textHasContent(text)) {
-      const key = text.match(mustacheRegex)[1];
-      if (state[key]) {
+      const match = text.match(mustacheRegex);
+      const key = match && match[1];
+      if (key && state[key]) {
         node.textContent = state[key];
         addDep(key, newVal => (node.textContent = newVal));
       }
     }
   };
 
+  const makeListenerWithState = fn => e => fn(state, e);
+
   const handleElement = node => {
-    const addListenerFns = [];
-    let condition = null;
+    let condition;
+    let forLoop;
+    const dynamicAttrs = [];
+    const events = [];
 
     Array.from(node.attributes).forEach(({ name, value }) => {
       switch (name.substring(0, 8)) {
@@ -65,64 +77,140 @@ export const makeComponent = (
           const eventName = name.replace('data-on-', '');
           const handlerKey = value.trim();
           if (typeof listeners[handlerKey] === 'function') {
-            addListenerFns.push(() =>
-              addListener(node, eventName, e => listeners[handlerKey](state, e))
-            );
+            events.push({
+              event: eventName,
+              listener: makeListenerWithState(listeners[handlerKey])
+            });
           }
           break;
         case 'data-if':
           condition = new Function('state', 'return ' + value);
           break;
         case 'data-for':
-          const placeholder = node.cloneNode(true);
-          console.log(placeholder);
           const forInMatch = value.match(forInRegex);
           if (forInMatch) {
             const [_, alias, arrayKey] = forInMatch;
-            console.log(state[arrayKey]);
+            forLoop = {
+              arrayKey,
+              alias
+            };
           }
           break;
         default:
           const mustacheMatch = value.match(mustacheRegex);
-          if (mustacheMatch) {
-            const key = mustacheMatch[1];
-            if (state[key]) {
-              addDep(key, newVal => node.setAttribute(name, newVal));
-              node.setAttribute(name, state[key]);
-            }
+          const key = mustacheMatch && mustacheMatch[1];
+          if (key && state[key]) {
+            dynamicAttrs.push({ name, key });
           }
       }
     });
 
-    let removeListenerFunctions;
+    /**
+     * 1) Attrs - done
+     * 2) New Items - done
+     * 3) Text
+     * 4) Condition
+     * 5) Nested loop
+     */
 
-    if (condition) {
+    if (forLoop) {
       const comment = document.createComment('');
-      const parent = node.parentNode;
+      node.parentNode.insertBefore(comment, node);
 
-      updateFunction = () => {
-        if (condition(state)) {
-          if (node.parentNode !== parent) {
-            replaceNode(comment, node);
-            removeListenerFunctions = addListenerFns.map(fn => fn());
+      const placeholder = node.cloneNode(true);
+      node.parentNode.removeChild(node);
+
+      const { arrayKey, alias } = forLoop;
+      const arrToLoop = state[arrayKey];
+
+      const patchFunctions = [];
+
+      addDep(arrayKey, (newVal, oldVal) => {
+        console.log(oldVal, '\n', newVal);
+        const zipArray = zip(newVal, oldVal);
+
+        zipArray.forEach(([newVal, oldVal], index) => {
+          if (isDef(oldVal) && isDef(newVal)) {
+            const newState = { ...state, $index: index, [alias]: newVal };
+
+            patchFunctions[index] &&
+              patchFunctions[index].newVal.forEach(fn => fn(newState));
           }
-        } else if (node.parentNode === parent) {
-          removeListenerFunctions &&
-            removeListenerFunctions.length &&
-            removeListenerFunctions.forEach(fn => fn());
-          replaceNode(node, comment);
-        }
+          if (isDef(newVal) && !isDef(oldVal)) {
+            initEl(newVal, index);
+          }
+          if (!isDef(newVal) && isDef(oldVal)) {
+            patchFunctions[index] && patchFunctions[index].remove();
+          }
+        });
+      });
+
+      const initEl = (val, index) => {
+        const updates = {
+          newVal: [],
+          remove: null
+        };
+        const scopeState = { ...state, [alias]: val, $index: index };
+        const newNode = placeholder.cloneNode(true);
+
+        const addListenerFns = events.map(({ event, listener }) => () =>
+          addListener(newNode, event, listener)
+        );
+
+        dynamicAttrs.forEach(({ name, key }) => {
+          const updateAttr = setAttribute(newNode, name, scopeState[key]);
+          updates.newVal.push(state => {
+            updateAttr(state[key]);
+          });
+        });
+
+        let removeListenerFunctions;
+        comment.parentNode.insertBefore(newNode, comment);
+        updates.remove = () => newNode.parentNode.removeChild(newNode);
+        removeListenerFunctions = addListenerFns.map(fn => fn());
+        patchFunctions[index] = updates;
       };
 
-      if (!condition(state)) {
-        replaceNode(node, comment);
+      arrToLoop.forEach(initEl);
+    } else {
+      const addListenerFns = events.map(({ event, listener }) => () =>
+        addListener(node, event, listener)
+      );
+
+      dynamicAttrs.forEach(({ name, key }) => {
+        addDep(key, setAttribute(node, name, state[key]));
+      });
+
+      let removeListenerFunctions;
+
+      if (condition) {
+        const comment = document.createComment('');
+        const parent = node.parentNode;
+
+        updateFunction = () => {
+          if (condition(state)) {
+            if (node.parentNode !== parent) {
+              replaceNode(comment, node);
+              removeListenerFunctions = addListenerFns.map(fn => fn());
+            }
+          } else if (node.parentNode === parent) {
+            removeListenerFunctions &&
+              removeListenerFunctions.length &&
+              removeListenerFunctions.forEach(fn => fn());
+            replaceNode(node, comment);
+          }
+        };
+
+        if (!condition(state)) {
+          replaceNode(node, comment);
+        } else {
+          removeListenerFunctions = addListenerFns.map(fn => fn());
+        }
+
+        updateFunction = null;
       } else {
         removeListenerFunctions = addListenerFns.map(fn => fn());
       }
-
-      updateFunction = null;
-    } else {
-      removeListenerFunctions = addListenerFns.map(fn => fn());
     }
   };
 
