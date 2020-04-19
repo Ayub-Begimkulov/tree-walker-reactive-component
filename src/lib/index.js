@@ -1,6 +1,6 @@
 import { zip } from 'lodash-es';
 import {
-  isDef,
+  isDefined,
   textHasContent,
   replaceNode,
   addListener,
@@ -23,8 +23,11 @@ export const makeComponent = (
   let updateFunction = null;
   const deps = Object.create(null);
 
-  const addDep = (key, value) =>
+  const addDep = (key, value) => {
     (deps[key] || (deps[key] = new Set())).add(value);
+
+    return () => deps[key].delete(value);
+  };
 
   const state = new Proxy(initialState, {
     get(obj, key) {
@@ -39,10 +42,10 @@ export const makeComponent = (
     }
   });
 
-  const init = () => {
-    const WHAT_TO_SHOW = 5; // element or text
-    const walker = document.createTreeWalker(el, WHAT_TO_SHOW);
+  const WHAT_TO_SHOW = 5; // element or text
+  const walker = document.createTreeWalker(el, WHAT_TO_SHOW);
 
+  const init = () => {
     let current = el;
 
     while (current) {
@@ -50,6 +53,8 @@ export const makeComponent = (
       current = walker.nextNode();
     }
   };
+
+  const next = () => walker.nextNode();
 
   const handleText = node => {
     const text = node.textContent;
@@ -99,7 +104,7 @@ export const makeComponent = (
         default:
           const mustacheMatch = value.match(mustacheRegex);
           const key = mustacheMatch && mustacheMatch[1];
-          if (key && state[key]) {
+          if (key) {
             dynamicAttrs.push({ name, key });
           }
       }
@@ -108,7 +113,7 @@ export const makeComponent = (
     /**
      * 1) Attrs - done
      * 2) New Items - done
-     * 3) Text
+     * 3) Text - done
      * 4) Condition
      * 5) Nested loop
      */
@@ -118,6 +123,8 @@ export const makeComponent = (
       node.parentNode.insertBefore(comment, node);
 
       const placeholder = node.cloneNode(true);
+
+      next();
       node.parentNode.removeChild(node);
 
       const { arrayKey, alias } = forLoop;
@@ -130,17 +137,18 @@ export const makeComponent = (
         const zipArray = zip(newVal, oldVal);
 
         zipArray.forEach(([newVal, oldVal], index) => {
-          if (isDef(oldVal) && isDef(newVal)) {
+          if (isDefined(oldVal) && isDefined(newVal)) {
             const newState = { ...state, $index: index, [alias]: newVal };
 
             patchFunctions[index] &&
               patchFunctions[index].newVal.forEach(fn => fn(newState));
           }
-          if (isDef(newVal) && !isDef(oldVal)) {
+          if (isDefined(newVal) && !isDefined(oldVal)) {
             initEl(newVal, index);
           }
-          if (!isDef(newVal) && isDef(oldVal)) {
-            patchFunctions[index] && patchFunctions[index].remove();
+          if (!isDefined(newVal) && isDefined(oldVal)) {
+            patchFunctions[index] &&
+              patchFunctions[index].remove.forEach(fn => fn());
           }
         });
       });
@@ -148,7 +156,7 @@ export const makeComponent = (
       const initEl = (val, index) => {
         const updates = {
           newVal: [],
-          remove: null
+          remove: []
         };
         const scopeState = { ...state, [alias]: val, $index: index };
         const newNode = placeholder.cloneNode(true);
@@ -158,15 +166,35 @@ export const makeComponent = (
         );
 
         dynamicAttrs.forEach(({ name, key }) => {
-          const updateAttr = setAttribute(newNode, name, scopeState[key]);
-          updates.newVal.push(state => {
-            updateAttr(state[key]);
-          });
+          if (scopeState[key]) {
+            const updateAttr = setAttribute(newNode, name, scopeState[key]);
+
+            updates.newVal.push(state => {
+              updateAttr(state[key]);
+            });
+          }
         });
+
+        const match = newNode.textContent.match(mustacheRegex);
+
+        if (match) {
+          const key = match[1];
+          if (key && scopeState[key]) {
+            newNode.textContent = scopeState[key];
+            if (key !== alias) {
+              const remove = addDep(
+                key,
+                newVal => (newNode.textContent = newVal)
+              );
+
+              updates.remove.push(remove);
+            }
+          }
+        }
 
         let removeListenerFunctions;
         comment.parentNode.insertBefore(newNode, comment);
-        updates.remove = () => newNode.parentNode.removeChild(newNode);
+        updates.remove.push(() => newNode.parentNode.removeChild(newNode));
         removeListenerFunctions = addListenerFns.map(fn => fn());
         patchFunctions[index] = updates;
       };
@@ -178,7 +206,7 @@ export const makeComponent = (
       );
 
       dynamicAttrs.forEach(({ name, key }) => {
-        addDep(key, setAttribute(node, name, state[key]));
+        state[key] && addDep(key, setAttribute(node, name, state[key]));
       });
 
       let removeListenerFunctions;

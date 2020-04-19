@@ -13,7 +13,7 @@
         {{ text }}
       </div>
       <button data-on-click="updateArray">Add item</button>
-      <p data-for="text in arr" class="{{ text }}">
+      <p data-for="num in arr" data-on-click="onClick" class="{{ num }}">
         {{ text }}
       </p>
     </div>

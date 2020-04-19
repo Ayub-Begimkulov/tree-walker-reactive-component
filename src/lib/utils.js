@@ -16,4 +16,4 @@ export const setAttribute = (el, attr, val) => {
   return newVal => el.setAttribute(attr, newVal);
 };
 
-export const isDef = v => v !== undefined;
+export const isDefined = v => v !== undefined;

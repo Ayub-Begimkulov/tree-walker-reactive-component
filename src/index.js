@@ -3,7 +3,7 @@ import { makeComponent } from './lib';
 const root = document.querySelector('#app');
 
 const state = {
-  arr: ['a', 'b', 'c'],
+  arr: [1, 2, 3],
   text: 'hello world'
 };
 
