@@ -18,7 +18,7 @@
   },
   "homepage": "https://github.com/Ayub-Begimkulov/tree-walker-reactive-component#readme",
   "dependencies": {
-    "lodash-es": "^4.17.15"
+    "lodash-es": "^4.17.21"
   },
   "devDependencies": {
     "@babel/core": "^7.9.0",
